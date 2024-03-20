@@ -18,7 +18,10 @@ impl Config {
         Ok(config)
     }
 
-    pub async fn save_to_file(&self, path: impl AsRef<Path>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn save_to_file(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let toml = toml::to_string(self)?;
         fs::write(path, toml).await?;
         Ok(())

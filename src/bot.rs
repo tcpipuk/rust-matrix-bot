@@ -1,8 +1,10 @@
-use crate::matrix::MatrixClient;
 use crate::config::Config;
+use crate::matrix::MatrixClient;
 use ruma::{
     events::{
-        room::message::{MessageEventContent, MessageType, TextMessageEventContent, Relation, RelatesTo},
+        room::message::{
+            MessageEventContent, MessageType, RelatesTo, Relation, TextMessageEventContent,
+        },
         AnyMessageEventContent,
     },
     identifiers::{EventId, RoomId},
@@ -10,7 +12,7 @@ use ruma::{
     OwnedUserId,
 };
 use serde_json::Value;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub struct Bot {
     matrix_client: MatrixClient,
@@ -36,19 +38,36 @@ impl Bot {
         }
     }
 
-    async fn process_message_event(&self, event: &AnySyncRoomEvent) -> Result<(), Box<dyn std::error::Error>> {
+    async fn process_message_event(
+        &self,
+        event: &AnySyncRoomEvent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let AnySyncRoomEvent::RoomMessage(msg_event) = event {
             if let Some(body) = msg_event.content().msgtype.text() {
                 if body.starts_with("!ping") {
-                    self.handle_ping_command(&msg_event.room_id, &body[5..].trim()).await?;
+                    self.handle_ping_command(&msg_event.room_id, &body[5..].trim())
+                        .await?;
                 }
             }
         }
         Ok(())
     }
 
-    async fn handle_ping_command(&self, room_id: &RoomId, sender: &UserId, event_id: &EventId, optional_text: &str, origin_server_ts: u64) -> Result<(), Box<dyn std::error::Error>> {
-        let now = UNIX_EPOCH + Duration::from_secs(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+    async fn handle_ping_command(
+        &self,
+        room_id: &RoomId,
+        sender: &UserId,
+        event_id: &EventId,
+        optional_text: &str,
+        origin_server_ts: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let now = UNIX_EPOCH
+            + Duration::from_secs(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            );
         let diff = now.as_millis() as u64 - origin_server_ts;
 
         // Format the optional text

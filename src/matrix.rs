@@ -1,11 +1,10 @@
 use ruma::{
     api::client::{
+        error::Error as RumaClientError,
         r0::{
-            account::register::Request as RegisterRequest,
-            message::send_message_event,
+            account::register::Request as RegisterRequest, message::send_message_event,
             sync::sync_events,
         },
-        error::Error as RumaClientError,
     },
     events::{
         room::message::{MessageEventContent, MessageType, TextMessageEventContent},
@@ -14,7 +13,6 @@ use ruma::{
     Client, DeviceId, UserId,
 };
 use serde_json::json;
-use tokio::time::{delay_for, Duration};
 
 use crate::config::Config;
 
@@ -42,7 +40,12 @@ impl MatrixClient {
             let request = RegisterRequest::new();
             let response = self
                 .client
-                .send(request, Some(DeviceId::try_from(config.device_id.as_deref().unwrap_or(""))?))
+                .send(
+                    request,
+                    Some(DeviceId::try_from(
+                        config.device_id.as_deref().unwrap_or(""),
+                    )?),
+                )
                 .await?;
 
             self.client.set_access_token(response.access_token);
@@ -50,20 +53,12 @@ impl MatrixClient {
         Ok(())
     }
 
-    pub async fn send_message(
-        &self,
-        room_id: &str,
-        message: &str,
-    ) -> Result<(), RumaClientError> {
+    pub async fn send_message(&self, room_id: &str, message: &str) -> Result<(), RumaClientError> {
         let content = MessageEventContent::text_plain(message);
         let txn_id = format!("{}", uuid::Uuid::new_v4());
         self.client
             .send(
-                send_message_event::Request::new(
-                    room_id.try_into()?,
-                    &txn_id,
-                    &content,
-                ),
+                send_message_event::Request::new(room_id.try_into()?, &txn_id, &content),
                 None,
             )
             .await?;
