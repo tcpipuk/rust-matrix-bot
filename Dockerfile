@@ -6,10 +6,9 @@ RUN apk add --no-cache musl-dev openssl-dev
 
 # Create a new empty shell project
 RUN USER=root cargo new --bin matrix_bot
-WORKDIR /matrix_bot
+WORKDIR /build
 
 # Copy our manifests
-COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
 # This trick will cache our deps
@@ -30,7 +29,7 @@ FROM alpine:latest
 RUN apk add --no-cache libgcc ca-certificates
 
 # Copy the binary from the builder stage
-COPY --from=builder /matrix_bot/target/release/matrix_bot /usr/local/bin/matrix_bot
+COPY --from=builder /build/target/release/matrix_bot /usr/local/bin/matrix_bot
 
 # Set the working directory to /usr/local/bin
 WORKDIR /usr/local/bin
