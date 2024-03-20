@@ -1,21 +1,47 @@
 use crate::config::Config;
 use crate::matrix::MatrixClient;
-use ruma::{
-    events::{
-        room::message::{
-            MessageEventContent, MessageType, RelatesTo, Relation, TextMessageEventContent,
-        },
-        AnyMessageEventContent,
+use ruma::events::{
+    room::message::{
+        FormattedBodyFormat, MessageEventContent, MessageType, NoticeMessageEventContent, RelatesTo, RoomMessageEventContent, TextMessageEventContent,
     },
-    identifiers::{EventId, RoomId},
-    serde::Raw,
-    OwnedUserId,
+    AnyMessageEventContent, AnyMessageEventContent,
 };
-use serde_json::Value;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use ruma::{EventId, RoomId};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Bot {
     matrix_client: MatrixClient,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PongRelation {
+    #[serde(rename = "rel_type")]
+    pub rel_type: String,
+    #[serde(rename = "event_id")]
+    pub event_id: EventId,
+}
+
+impl From<PongRelation> for RelatesTo {
+    fn from(pong: PongRelation) -> Self {
+        Self::new(pong.rel_type, pong.event_id)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NoticeMessageEventContentWithRelatesTo {
+    pub msgtype: MessageType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: String,
+    #[serde(rename = "msgtype")]
+    pub formatted: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relates_to: Option<RelatesTo>,
+}
+
+impl From<NoticeMessageEventContentWithRelatesTo> for AnyMessageEventContent {
+    fn from(content: NoticeMessageEventContentWithRelatesTo) -> Self {
+        AnyMessageEventContent::RoomMessage(RoomMessageEventContent::Notice(content))
+    }
 }
 
 impl Bot {
@@ -56,40 +82,48 @@ impl Bot {
     async fn handle_ping_command(
         &self,
         room_id: &RoomId,
-        sender: &UserId,
+        sender: &str,
         event_id: &EventId,
         optional_text: &str,
-        origin_server_ts: u64,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let now = UNIX_EPOCH
-            + Duration::from_secs(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            );
-        let diff = now.as_millis() as u64 - origin_server_ts;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+        let diff = now - event_id.as_secs() * 1000;
 
-        // Format the optional text
-        let message = if !optional_text.is_empty() {
+        let message_text = if !optional_text.is_empty() {
             format!("\"{}\" ", optional_text)
         } else {
             "".to_string()
         };
 
-        let plain_body = format!(
-            "{}: Pong! (ping {}took {} ms to arrive)",
-            sender, message, diff
-        );
+        // Create the message content with relation
+        let content = RoomMessageEventContent {
+            NoticeMessageEventContent {
+                body: format!(
+                    "{}: Pong! (ping {}took {} ms to arrive)",
+                    sender, message_text, diff
+                ),
+                formatted: Some(FormattedBody {
+                    body: format!(
+                        "<a href='https://matrix.to/#/{sender}'>{sender}</a>: Pong! \
+                        (<a href='https://matrix.to/#/{room_id}/{event_id}'>ping</a> {message_text}took {diff} ms to arrive)",
+                        sender = sender,
+                        room_id = room_id,
+                        event_id = event_id,
+                        message_text = message_text,
+                        diff = diff
+                    ),
+                    format: MessageType::Html,
+                }),
+        },
+            relates_to: Some(RelatesTo::from(PongRelation {
+                rel_type: "xyz.maubot.pong".to_string(),
+                event_id: event_id.clone(),
+            })),
+            msgtype: MessageType::Notice,
+            mentions: sender,
+        };
 
-        let formatted_body = format!(
-            "<a href='https://matrix.to/#/{sender}'>{sender}</a>: Pong! \
-            (<a href='https://matrix.to/#/{room_id}/{event_id}'>ping</a> {message}took {diff} ms to arrive)"
-        );
-
-        let content = MessageEventContent::notice_formatted(&plain_body, &formatted_body);
-
-        self.matrix_client.send_message(room_id, content).await?;
+        self.matrix_client.send_message(room_id, &content).await?;
         Ok(())
     }
 }

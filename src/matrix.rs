@@ -1,30 +1,17 @@
-use ruma::{
-    api::client::{
-        error::Error as RumaClientError,
-        r0::{
-            account::register::Request as RegisterRequest, message::send_message_event,
-            sync::sync_events,
-        },
-    },
-    events::{
-        room::message::{MessageEventContent, MessageType, TextMessageEventContent},
-        AnyMessageEventContent,
-    },
-    Client, DeviceId, UserId,
-};
-use serde_json::json;
-
 use crate::config::Config;
-
-pub struct MatrixClient {
-    client: Client,
-    next_batch: Option<String>,
-}
+use hyper_tls::HttpsConnector;
+use ruma::{
+    api::client::message::send_message_event::v3::Request as SendMessageRequest,
+    api::client::sync::sync_events, events::room::message::RoomMessageEventContent, Client, RoomId,
+};
+use serde_json::Value;
+use std::convert::TryFrom;
 
 impl MatrixClient {
     pub async fn new(config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
         let homeserver_url = config.homeserver_url.parse()?;
-        let client = Client::new(homeserver_url, None);
+        let https = HttpsConnector::new();
+        let client = Client::new(https, config.homeserver_url.parse()?);
 
         Ok(Self {
             client,
@@ -34,39 +21,49 @@ impl MatrixClient {
 
     pub async fn login(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref token) = config.auth_token {
-            self.client.set_access_token(token.clone());
+            self.client = Client::builder()
+                .homeserver_url(config.homeserver_url)
+                .access_token(Some(token.clone()))
+                .build()
+                .await?;
         } else {
-            let user_id = UserId::parse(&config.user_id)?;
-            let request = RegisterRequest::new();
-            let response = self
+            self.client = Client::builder()
+                .homeserver_url(config.homeserver_url)
+                .build()
+                .await?;
+
+            let session = self
                 .client
-                .send(
-                    request,
-                    Some(DeviceId::try_from(
-                        config.device_id.as_deref().unwrap_or(""),
-                    )?),
+                .log_in(
+                    &config.user_id,
+                    &config.password.as_deref().unwrap(),
+                    None,
+                    None,
                 )
                 .await?;
 
-            self.client.set_access_token(response.access_token);
+            config.update_auth_details(session.device_id.to_string(), session.access_token);
         }
         Ok(())
     }
 
-    pub async fn send_message(&self, room_id: &str, message: &str) -> Result<(), RumaClientError> {
-        let content = MessageEventContent::text_plain(message);
-        let txn_id = format!("{}", uuid::Uuid::new_v4());
+    pub async fn send_message(
+        &self,
+        room_id: &str,
+        content: RoomMessageEventContent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let room_id = RoomId::try_from(&room_id)?;
+        let txn_id = uuid::Uuid::new_v4().to_string();
+
         self.client
-            .send(
-                send_message_event::Request::new(room_id.try_into()?, &txn_id, &content),
-                None,
-            )
+            .send_request(SendMessageRequest::new(&room_id, &txn_id, &content))
             .await?;
+
         Ok(())
     }
 
     pub async fn sync(&mut self) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
-        let request = sync_events::Request::new().since(self.next_batch.as_deref());
+        let request = sync_events::v3::Request::new().since(self.next_batch.as_deref());
         let response = self.client.send(request, None).await?;
 
         // Update the next_batch token for the next incremental sync
