@@ -1,0 +1,23 @@
+# config.example.toml
+
+# The URL of your Matrix homeserver. This is where your bot will connect.
+# Example: "https://matrix.org"
+homeserver_url = "https://your.matrix.server"
+
+# The full user ID for your bot. This is the account the bot will use to log in and interact within rooms.
+# Example: "@your_bot:matrix.org"
+user_id = "@bot_username:your.matrix.server"
+
+# (Optional) The password for your bot's account. This is only needed if you're not using an auth_token.
+# It's recommended to use an auth_token for better security.
+# Example: "very_secure_password"
+password = "your_password"
+
+# (Optional) The device ID of your bot's session. If you leave this out, a new session will be created.
+# Example: "JLAFKJWSCS"
+#device_id = "RUSTPINGBOT"
+
+# (Optional) An authentication token for the bot's session. If you provide this, you don't need to provide a password.
+# This is the preferred method for authenticating your bot.
+# Example: "syt_YWRtaW4_..."
+#auth_token = "your_auth_token"

@@ -1,3 +1,8 @@
+[package]
+name = "rust-matrix-bot"
+version = "0.1.0"
+edition = "2021"
+
 [dependencies]
 hyper = "0.14"
 ruma = { git = "https://github.com/ruma/ruma", features = [
@@ -5,5 +10,7 @@ ruma = { git = "https://github.com/ruma/ruma", features = [
     "client-api",
 ] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 toml = "0.5"
+uuid = { version = "0.8", features = ["v4"] }
